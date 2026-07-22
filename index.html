@@ -1,0 +1,853 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Quorum — prototype (List + Recommend)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    /* warm dark base */
+    --bg:#161210; --bg2:#0e0b09; --surface:#221c18; --surface2:#2b2420;
+    --ink:#f7f1e6; --ink2:#bcb0a0; --line:#3b332c;
+    /* colorful accents */
+    --amber:#ffb454; --coral:#ff6f61; --sky:#5aa9ff; --mint:#3ddc97; --violet:#b78bff;
+    /* semantic */
+    --red:#ff5a4d; --seal:#c8372a; --blue:var(--sky);
+    --mono:"SF Mono",ui-monospace,"Cascadia Mono","Roboto Mono","Courier New",monospace;
+    --sans:"Space Grotesk",system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    --display:"Fraunces","Iowan Old Style",Georgia,"Times New Roman",serif;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{
+    background:var(--bg); color:var(--ink);
+    font-family:var(--sans);
+    line-height:1.6; -webkit-font-smoothing:antialiased;
+    display:flex; justify-content:center; padding:24px 14px 60px;
+    min-height:100vh; position:relative; overflow-x:hidden;
+  }
+  /* soft floating glow so the dark never feels flat */
+  body::before{
+    content:""; position:fixed; inset:-20% -10% auto -10%; height:70vh; z-index:0;
+    background:
+      radial-gradient(50% 60% at 20% 20%, rgba(255,111,97,.16), transparent 70%),
+      radial-gradient(45% 55% at 85% 10%, rgba(90,169,255,.14), transparent 70%),
+      radial-gradient(40% 50% at 60% 90%, rgba(255,180,84,.12), transparent 70%);
+    filter:blur(10px); animation:drift 18s ease-in-out infinite alternate; pointer-events:none;
+  }
+  .wrap{width:100%; max-width:600px; position:relative; z-index:1}
+  .brand{display:inline-flex; align-items:center; gap:11px; letter-spacing:.3em; font-weight:800; font-size:14px; font-family:var(--mono);
+    background:linear-gradient(90deg,var(--amber),var(--coral)); -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent;}
+  .brand .dot{width:24px;height:24px; filter:drop-shadow(0 2px 6px rgba(255,111,97,.35))}
+
+  .sheet{
+    background:linear-gradient(180deg,var(--surface),var(--surface2));
+    border:1px solid var(--line);
+    box-shadow:0 1px 0 rgba(255,255,255,.04) inset, 0 18px 50px rgba(0,0,0,.45);
+    border-radius:18px; padding:24px;
+  }
+  .sheet:not(.hidden){animation:riseIn .5s cubic-bezier(.2,.75,.2,1)}
+
+  h1{font-family:var(--display); font-size:27px; letter-spacing:0; margin:0 0 6px; font-weight:600; line-height:1.15}
+  .sub{color:var(--ink2); font-size:14px; margin:0 0 20px}
+  label{display:block; font-size:12px; letter-spacing:.1em; text-transform:uppercase; color:var(--amber); margin:18px 0 7px; font-family:var(--sans); font-weight:600}
+
+  input[type=text]{
+    width:100%; font-family:var(--sans); font-size:16px; color:var(--ink); background:rgba(255,255,255,.03);
+    border:1.5px solid var(--line); border-radius:12px; padding:12px 14px; outline:none;
+    transition:border-color .2s, box-shadow .2s, background .2s;
+  }
+  input[type=text]:focus{border-color:var(--amber); box-shadow:0 0 0 3px rgba(255,180,84,.18); background:rgba(255,255,255,.05)}
+  input::placeholder{color:#8a8072}
+  select{font-family:var(--sans);font-size:16px;color:var(--ink);background:rgba(255,255,255,.03);border:1.5px solid var(--line);border-radius:12px;padding:12px 14px; outline:none; transition:border-color .2s, box-shadow .2s}
+  select:focus{border-color:var(--amber); box-shadow:0 0 0 3px rgba(255,180,84,.18)}
+
+  .opts{margin:6px 0 0; list-style:none; padding:0}
+  .opt-edit{display:flex; align-items:center; gap:8px; margin:8px 0}
+  .opt-edit input{flex:1}
+  .x{border:none;background:rgba(255,255,255,.05);color:var(--ink2);cursor:pointer;font:inherit;font-size:18px;line-height:1;padding:6px 10px;border-radius:10px;transition:background .2s,color .2s,transform .15s}
+  .x:hover{background:rgba(255,90,77,.18);color:var(--red);transform:scale(1.08)}
+
+  button{font-family:var(--sans); cursor:pointer}
+  .btn{display:inline-block; background:linear-gradient(135deg,var(--amber),var(--coral)); color:#1a120c; border:none;
+    padding:13px 20px; border-radius:12px; letter-spacing:.04em; font-size:14px; font-weight:800; margin-top:8px;
+    box-shadow:0 8px 22px rgba(255,111,97,.28); transition:transform .16s cubic-bezier(.2,.8,.2,1), box-shadow .2s, filter .2s}
+  .btn:hover{transform:translateY(-2px); box-shadow:0 12px 30px rgba(255,111,97,.42); filter:brightness(1.06)}
+  .btn:active{transform:translateY(0) scale(.98)}
+  .btn.ghost{background:transparent;color:var(--ink);border:1.5px solid var(--line);box-shadow:none}
+  .btn.ghost:hover{border-color:var(--amber);color:var(--amber);background:rgba(255,180,84,.08)}
+  .btn.small{padding:9px 14px;font-size:12px}
+  .btn:disabled{opacity:.4;cursor:not-allowed;transform:none;box-shadow:none;filter:none}
+
+  .add{border:1.5px dashed var(--line); background:none; color:var(--ink2); width:100%; padding:11px; border-radius:12px; letter-spacing:.04em; margin-top:4px; font-size:14px; transition:border-color .2s,color .2s,background .2s}
+  .add:hover{border-color:var(--amber); color:var(--amber); background:rgba(255,180,84,.06)}
+
+  .choice{display:flex; gap:10px; margin-top:6px}
+  .choice .c{flex:1; border:1.5px solid var(--line); border-radius:14px; padding:14px; cursor:pointer; background:rgba(255,255,255,.02); text-align:left; transition:transform .16s, border-color .2s, box-shadow .2s, background .2s}
+  .choice .c:hover{transform:translateY(-2px); border-color:rgba(255,180,84,.5)}
+  .choice .c.active{border-color:var(--amber); background:rgba(255,180,84,.1); box-shadow:0 0 0 1px var(--amber) inset, 0 8px 20px rgba(255,180,84,.18)}
+  .choice .c b{display:block; font-size:15px; letter-spacing:.01em}
+  .choice .c span{display:block; color:var(--ink2); font-size:12px; margin-top:4px; text-transform:none; letter-spacing:0; line-height:1.45}
+
+  .warn{color:var(--red); font-size:13px; margin-top:10px; display:none; background:rgba(255,90,77,.1); border:1px solid rgba(255,90,77,.35); padding:10px 12px; border-radius:10px}
+
+  .row{display:flex; align-items:center; justify-content:space-between; gap:12px}
+  .dur{display:flex; gap:8px; margin-top:6px}
+  .dur button{border:1.5px solid var(--line); background:rgba(255,255,255,.02); color:var(--ink2); border-radius:11px; padding:9px 14px; font-size:13px; transition:transform .15s, border-color .2s, color .2s, background .2s}
+  .dur button:hover{transform:translateY(-1px); border-color:rgba(255,180,84,.5)}
+  .dur button.active{border-color:var(--amber); color:#1a120c; background:linear-gradient(135deg,var(--amber),var(--coral)); font-weight:700}
+
+  .link{display:flex; gap:8px; align-items:stretch; margin-top:6px}
+  .link code{flex:1; background:rgba(90,169,255,.08); border:1px solid rgba(90,169,255,.3); color:var(--sky); padding:13px; border-radius:11px; font-size:14px; font-family:var(--mono); overflow:auto; white-space:nowrap}
+
+  /* chips (musts/prefers) */
+  .chips{display:flex;flex-wrap:wrap;gap:7px;margin-top:9px}
+  .chip-c{font-size:13px;border-radius:999px;padding:5px 12px;border:1.5px solid; font-family:var(--mono); animation:pop .32s backwards}
+  .chip-c.must{color:var(--coral);border-color:var(--coral);background:rgba(255,111,97,.12)}
+  .chip-c.pref{color:var(--sky);border-color:var(--sky);background:rgba(90,169,255,.12)}
+  /* tappable picker chips */
+  .chip-c.pick{cursor:pointer; animation:none; color:var(--ink2); border-color:var(--line); background:transparent; opacity:.72; transition:transform .14s, opacity .15s, color .2s, border-color .2s, background .2s}
+  .chip-c.pick:hover{opacity:1; transform:translateY(-1px); border-color:var(--amber); color:var(--amber)}
+  .chip-c.pick.mustc.sel{opacity:1; color:var(--coral); border-color:var(--coral); background:rgba(255,111,97,.14)}
+  .chip-c.pick.prefc.sel{opacity:1; color:var(--sky); border-color:var(--sky); background:rgba(90,169,255,.14)}
+  .chip-c:nth-child(2){animation-delay:.04s}.chip-c:nth-child(3){animation-delay:.08s}
+  .chip-c:nth-child(4){animation-delay:.12s}.chip-c:nth-child(5){animation-delay:.16s}
+  .chip-c:nth-child(6){animation-delay:.2s}.chip-c:nth-child(7){animation-delay:.24s}
+
+  .simline{border-top:1px solid var(--line);padding:14px 0}
+  .shortlist{list-style:none;padding:0;margin:12px 0}
+  .shortlist li{border:1px solid var(--line);border-radius:14px;padding:14px 16px;margin:10px 0;background:rgba(255,255,255,.03); animation:riseIn .4s backwards}
+  .shortlist li:nth-child(2){animation-delay:.06s}.shortlist li:nth-child(3){animation-delay:.12s}.shortlist li:nth-child(4){animation-delay:.18s}
+  .shortlist .nm{font-size:16px; font-weight:700}
+  .shortlist .meta{font-size:13px;color:var(--ink2);margin-top:4px}
+  .legend{font-size:13px;color:var(--ink2);margin-top:8px;line-height:1.5}
+
+  /* vote */
+  .countdown{font-size:14px; letter-spacing:.08em; color:var(--ink2); font-family:var(--mono)}
+  .countdown b{color:var(--amber); font-size:16px}
+  .countdown b.urgent{color:var(--red); animation:pulse 1s ease-in-out infinite}
+  .ballot{list-style:none; padding:0; margin:16px 0 0}
+  .ballot li{display:flex; align-items:center; gap:14px; border:1.5px solid var(--line); border-radius:14px;
+    padding:14px 16px; margin:10px 0; background:rgba(255,255,255,.03); position:relative; cursor:pointer;
+    transition:transform .16s cubic-bezier(.2,.8,.2,1), border-color .2s, box-shadow .2s, background .2s;
+    animation:riseIn .4s backwards}
+  .ballot li:nth-child(2){animation-delay:.06s}.ballot li:nth-child(3){animation-delay:.12s}.ballot li:nth-child(4){animation-delay:.18s}.ballot li:nth-child(5){animation-delay:.24s}
+  .ballot li:hover{transform:translateY(-2px); border-color:rgba(255,180,84,.5)}
+  .ballot li.pick{border-color:var(--amber); background:rgba(255,180,84,.1); box-shadow:0 0 0 1px var(--amber) inset, 0 8px 22px rgba(255,180,84,.2); transform:translateY(-1px)}
+  .mark{width:26px;height:26px;flex:none;border:1.5px solid var(--ink2);border-radius:8px;display:grid;place-items:center; transition:background .2s, border-color .2s, transform .2s}
+  .mark svg{opacity:0; width:16px;height:16px; transition:opacity .2s}
+  .ballot li.pick .mark{background:linear-gradient(135deg,var(--amber),var(--coral)); border-color:transparent; transform:scale(1.05)}
+  .ballot li.pick .mark svg{opacity:1; animation:pop .3s}
+  .oname{flex:1; font-size:16px}
+  .status{font-size:12px; color:var(--ink2); letter-spacing:.06em; text-transform:uppercase; margin-top:16px; font-family:var(--mono)}
+  .voters{display:flex; gap:8px; margin-top:16px; flex-wrap:wrap}
+  .chip{font-size:12px; border:1px solid var(--line); border-radius:999px; padding:5px 12px; color:var(--ink2); transition:all .3s}
+  .chip.in{border-color:var(--mint); color:var(--mint); background:rgba(61,220,151,.12); animation:pop .3s}
+
+  /* results */
+  .res{list-style:none;padding:0;margin:12px 0}
+  .res li{display:flex; align-items:center; gap:14px; padding:16px; border:1.5px solid var(--line);
+    border-radius:14px; margin:11px 0; background:rgba(255,255,255,.03); position:relative; overflow:hidden;
+    animation:riseIn .45s backwards}
+  .res li:nth-child(2){animation-delay:.08s}.res li:nth-child(3){animation-delay:.16s}.res li:nth-child(4){animation-delay:.24s}
+  .res .oname{font-size:16px; font-weight:700}
+  .res .count{margin-left:auto; font-size:13px; color:var(--ink2); letter-spacing:.08em; font-family:var(--mono)}
+  .tally line{stroke:var(--amber); stroke-width:2.5; stroke-linecap:round}
+  .who{font-size:12px;color:var(--ink2);margin-top:4px;letter-spacing:.01em}
+  .struck{opacity:.5}
+  .stamp{position:absolute; right:12px; top:50%; transform:translateY(-50%) rotate(-11deg);
+    color:var(--red); border:2.5px solid var(--red); border-radius:6px; padding:2px 9px;
+    font-size:13px; letter-spacing:.16em; font-weight:800; opacity:.9; font-family:var(--mono);
+    animation:stampIn .5s .1s backwards}
+  .winner{border-color:var(--amber); background:rgba(255,180,84,.09); box-shadow:0 0 0 1px var(--amber) inset, 0 0 30px rgba(255,180,84,.22)}
+  .res li.winner > svg{animation:sealIn .6s .12s backwards}
+  .gapline{color:var(--coral); font-size:13px; margin-top:16px; background:rgba(255,111,97,.09); border:1px solid rgba(255,111,97,.3); padding:10px 12px; border-radius:10px}
+  .privline{color:var(--ink2); font-size:13px; margin-top:8px; line-height:1.5}
+  .foot{color:var(--ink2); font-size:12px; margin-top:24px; line-height:1.7}
+  .hidden{display:none}
+
+  /* topbar + pro */
+  .topbar{display:flex; align-items:center; justify-content:space-between; margin-bottom:18px}
+  .pro-pill{font-family:var(--mono); font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--amber);
+    background:rgba(255,180,84,.1); border:1px solid rgba(255,180,84,.4); border-radius:999px; padding:6px 13px;
+    transition:transform .15s, background .2s, box-shadow .2s}
+  .pro-pill:hover{background:rgba(255,180,84,.2); transform:translateY(-1px); box-shadow:0 6px 16px rgba(255,180,84,.22)}
+  .backbtn{font-family:var(--mono); font-size:13px; letter-spacing:.1em; text-transform:uppercase; color:var(--ink2);
+    background:none; border:1.5px solid var(--line); border-radius:999px; padding:9px 17px; transition:color .2s, border-color .2s, transform .15s}
+  .backbtn:hover{color:var(--amber); border-color:var(--amber); transform:translateX(-2px)}
+  .backbtn.hidden{display:none}
+  .pro-chip{border:1.5px dashed rgba(255,180,84,.5); background:rgba(255,180,84,.06); color:var(--amber); border-radius:11px; padding:9px 14px; font-size:13px; transition:transform .15s, background .2s}
+  .pro-chip:hover{transform:translateY(-1px); background:rgba(255,180,84,.14)}
+  .pro-nudge{display:inline-block; margin-top:10px; background:none; border:none; color:var(--ink2); font-family:var(--sans); font-size:12.5px; cursor:pointer; padding:2px 0; transition:color .2s}
+  .pro-nudge:hover{color:var(--amber)}
+  .pro-line{font-size:12.5px; color:var(--ink2); margin-top:16px}
+  .pro-line b{color:var(--amber); cursor:pointer; font-weight:600}
+  /* pro modal */
+  .modal-back{position:fixed; inset:0; z-index:50; background:rgba(8,6,5,.62); backdrop-filter:blur(4px); display:grid; place-items:center; padding:20px; animation:fade .25s}
+  .modal-back.hidden{display:none}
+  .modal{background:linear-gradient(180deg,var(--surface),var(--surface2)); border:1px solid var(--line); border-radius:20px; padding:24px; max-width:430px; width:100%; box-shadow:0 26px 64px rgba(0,0,0,.55); animation:riseIn .35s}
+  .modal-head{display:flex; align-items:center; justify-content:space-between}
+  .brand-sm{font-family:var(--mono); letter-spacing:.16em; text-transform:uppercase; font-weight:800; font-size:13px;
+    background:linear-gradient(90deg,var(--amber),var(--coral)); -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent}
+  .prolist{list-style:none; padding:0; margin:16px 0}
+  .prolist li{border:1px solid var(--line); border-radius:12px; padding:12px 14px; margin:9px 0; background:rgba(255,255,255,.03); animation:riseIn .4s backwards}
+  .prolist li:nth-child(2){animation-delay:.05s}.prolist li:nth-child(3){animation-delay:.1s}.prolist li:nth-child(4){animation-delay:.15s}.prolist li:nth-child(5){animation-delay:.2s}
+  .prolist b{display:block; font-size:15px}
+  .prolist span{display:block; color:var(--ink2); font-size:13px; margin-top:3px; line-height:1.45}
+  @keyframes fade{from{opacity:0}to{opacity:1}}
+
+  /* motion keyframes */
+  @keyframes riseIn{from{opacity:0; transform:translateY(16px)} to{opacity:1; transform:none}}
+  @keyframes pop{0%{opacity:0; transform:scale(.6)} 60%{transform:scale(1.1)} 100%{opacity:1; transform:scale(1)}}
+  @keyframes pulse{0%,100%{opacity:1} 50%{opacity:.4}}
+  @keyframes drift{0%{transform:translate(0,0)} 100%{transform:translate(-4%,4%)}}
+  @keyframes stampIn{0%{opacity:0; transform:translateY(-50%) rotate(-11deg) scale(2.6)} 60%{opacity:.95} 100%{opacity:.9; transform:translateY(-50%) rotate(-11deg) scale(1)}}
+  @keyframes sealIn{0%{opacity:0; transform:scale(2.2) rotate(-40deg)} 65%{transform:scale(.9) rotate(8deg)} 100%{opacity:1; transform:scale(1) rotate(-8deg)}}
+
+  @media (prefers-reduced-motion: reduce){
+    *,body::before{animation:none !important; transition:none !important}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="topbar">
+    <button class="backbtn hidden" id="backBtn">‹ Back</button>
+    <span class="brand"><svg class="dot" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="none" stroke="#ffb454" stroke-width="1.5"/><line x1="8" y1="7" x2="8" y2="17" stroke="#f7f1e6" stroke-width="2"/><line x1="11" y1="7" x2="11" y2="17" stroke="#f7f1e6" stroke-width="2"/><line x1="14" y1="7" x2="14" y2="17" stroke="#f7f1e6" stroke-width="2"/><line x1="6.5" y1="16.5" x2="15.5" y2="7.5" stroke="#ff6f61" stroke-width="2"/></svg>QUORUM</span>
+    <button class="pro-pill" id="proOpen">✦ Pro</button>
+  </div>
+
+  <!-- CREATE -->
+  <section id="create" class="sheet">
+    <h1>Open a ballot</h1>
+    <p class="sub">Settle what the group is doing. Share the link, everyone answers, it decides on a timer.</p>
+
+    <label>How are the options chosen?</label>
+    <div class="choice" id="modeChoice">
+      <button class="c active" data-mode="list"><b>List</b><span>Someone drops a few places, the group votes.</span></button>
+      <button class="c" data-mode="recommend"><b>Recommend</b><span>Everyone gives keywords, Quorum suggests, then vote.</span></button>
+    </div>
+
+    <label>The question</label>
+    <input id="q" type="text" placeholder="Where for dinner Friday?" value="Where for dinner Friday?">
+
+    <div id="listBlock">
+      <label>Options</label>
+      <ul id="opts" class="opts"></ul>
+      <button class="add" id="addOpt">+ add option</button>
+      <button class="pro-nudge" id="saveGroup">☆ Save this group for next time · Pro</button>
+    </div>
+
+    <div id="recBlock" class="hidden">
+      <label>Category</label>
+      <select id="cat">
+        <option value="dinner">dinner</option>
+        <option value="drinks">drinks</option>
+        <option value="coffee">coffee</option>
+        <option value="movie">movie</option>
+        <option value="outdoors">outdoors</option>
+        <option value="activity">activity</option>
+      </select>
+      <p class="legend">Everyone picks a few things (budget, diet, allergens, vibe) and an optional cuisine. Quorum sorts them into <span style="color:var(--coral)">musts</span> (hard filters) and <span style="color:var(--sky)">prefers</span> (weights), combines the group, and suggests.</p>
+    </div>
+
+    <label>Ballot type</label>
+    <div class="choice" id="typeChoice">
+      <button class="c active" data-type="private"><b>Private vote</b><span>Votes sealed, no one sees who wanted what. This is the point.</span></button>
+      <button class="c" data-type="open"><b>Open vote</b><span>Everyone sees who voted for what. Just a normal poll.</span></button>
+    </div>
+    <p class="warn" id="sizeWarn">Fewer than 5 voters: reasons can still identify someone. Anonymity is not guaranteed at this size.</p>
+
+    <label>Closes in</label>
+    <div class="dur" id="dur">
+      <button data-s="900">15 min</button>
+      <button data-s="3600" class="active">1 hour</button>
+      <button data-s="10800">3 hours</button>
+      <button class="pro-chip" data-pro="1">Custom ✦</button>
+    </div>
+
+    <div class="row"><button class="btn" id="openBallot">Open ballot →</button></div>
+  </section>
+
+  <!-- SHARE -->
+  <section id="share" class="sheet hidden">
+    <h1>Ballot is open</h1>
+    <p class="sub">Paste this into the group chat. No download for anyone.</p>
+    <div class="link"><code id="url">https://quorum.vote/b/QX7K2M</code><button class="btn ghost small" id="copy">Copy</button></div>
+    <p class="privline" id="shareType"></p>
+    <div class="row" style="margin-top:18px"><button class="btn" id="goVote">Open as first voter →</button></div>
+    <p class="foot">In this prototype the other four members are simulated so you can watch a full ballot. In the real version each person opens the link on their own phone.</p>
+  </section>
+
+  <!-- INTAKE (recommend only) -->
+  <section id="intake" class="sheet hidden">
+    <h1 id="iq">Your constraints</h1>
+    <p class="sub">Tap what matters. Everything is optional, and your answers stay sealed.</p>
+
+    <label>Budget · your ceiling</label>
+    <div class="dur" id="budget">
+      <button data-tier="1">$</button>
+      <button data-tier="2">$$</button>
+      <button data-tier="3">$$$</button>
+      <button data-tier="4">$$$$</button>
+    </div>
+
+    <label>Dietary</label>
+    <div class="chips" id="dietPick"></div>
+
+    <label>Allergens to avoid</label>
+    <div class="chips" id="allergenPick"></div>
+    <div class="opt-edit" style="margin-top:10px">
+      <input id="allergenAdd" type="text" placeholder="Add your own (e.g. cilantro)">
+      <button class="btn ghost small" id="allergenAddBtn">Add</button>
+    </div>
+    <div class="chips" id="customPick"></div>
+
+    <label>Distance · how far you'll go</label>
+    <div class="dur" id="distance">
+      <button data-min="10">Walk · ≤10m</button>
+      <button data-min="20">Short ride · ≤20m</button>
+      <button data-min="0">Any</button>
+    </div>
+
+    <label>Cuisine · optional</label>
+    <div class="chips" id="cuisinePick"></div>
+    <div class="opt-edit" style="margin-top:10px">
+      <input id="cuisineAdd" type="text" placeholder="Add another (e.g. ramen, ethiopian)">
+      <button class="btn ghost small" id="cuisineAddBtn">Add</button>
+    </div>
+    <div class="chips" id="cuisineCustomPick"></div>
+
+    <label>Ambience</label>
+    <div class="chips" id="ambiencePick"></div>
+
+    <label style="margin-top:24px">Reads as</label>
+    <div class="chips" id="youChips"></div>
+
+    <label style="margin-top:24px">The rest of the group</label>
+    <div class="voters" id="simSealed"></div>
+    <p class="privline" id="jakeNote">You choose before you see anyone else. After you seal, you'll get the combined result — never who wanted what.</p>
+    <div class="row" style="margin-top:16px"><button class="btn" id="combineBtn">Combine everyone & suggest →</button></div>
+  </section>
+
+  <!-- COMBINE (recommend only) -->
+  <section id="combine" class="sheet hidden">
+    <h1>Quorum combined the group</h1>
+    <p class="sub">Everyone's musts are stacked as hard filters; prefers become weights. No line is tied to a name.</p>
+    <label>Group musts (hard filters)</label>
+    <div class="chips" id="cMusts"></div>
+    <label style="margin-top:18px">Group prefers (weights)</label>
+    <div class="chips" id="cPrefers"></div>
+    <p class="privline" id="combineNote" style="margin-top:14px"></p>
+    <label style="margin-top:18px">Shortlist</label>
+    <p class="legend" id="allergenNote" style="display:none">Allergens drop clear conflicts (a seafood spot for a shellfish allergy) and rank likelier-safe places higher. Menus can't be verified here, so anyone with an allergy should confirm with the restaurant.</p>
+    <ul id="shortlist" class="shortlist"></ul>
+    <div class="row"><button class="btn" id="toVote">Put shortlist to a vote →</button></div>
+  </section>
+
+  <!-- VOTE -->
+  <section id="vote" class="sheet hidden">
+    <div class="row"><h1 id="vq" style="margin:0">The question</h1></div>
+    <p class="countdown" id="cd">closes in <b>—</b></p>
+    <p class="sub" id="voteHint">Tap every option you'd be happy with, then seal.</p>
+    <ul id="ballot" class="ballot"></ul>
+    <button class="btn" id="seal">Seal my ballot</button>
+    <p class="status" id="gate">Sealed ballots hidden until 3 are in.</p>
+    <div class="voters" id="voters"></div>
+    <button class="btn ghost small" id="closeNow" style="margin-top:16px">Close ballot now</button>
+  </section>
+
+  <!-- RESULTS -->
+  <section id="results" class="sheet hidden">
+    <h1 id="rq">Decided</h1>
+    <p class="sub" id="rsub"></p>
+    <ul id="res" class="res"></ul>
+    <p class="gapline hidden" id="gapline"></p>
+    <p class="privline" id="privline"></p>
+    <p class="pro-line" id="histNudge">This decision won't be saved · <b>keep a history with Pro</b></p>
+    <div class="row"><button class="btn ghost" id="again">Start over</button></div>
+  </section>
+</div>
+
+<div class="modal-back hidden" id="proModal">
+  <div class="modal">
+    <div class="modal-head">
+      <span class="brand-sm">✦ Quorum Pro</span>
+      <button class="x" id="proClose">×</button>
+    </div>
+    <p class="sub" style="margin-top:8px">The ballot, both privacy modes, and anonymity stay free — always. Pro just makes life easier for whoever runs the decisions.</p>
+    <ul class="prolist">
+      <li><b>Your profile · autofill</b><span>Save any preferences you want and choose which ones autofill each ballot, editable anytime. Most people save diet and allergens, since those stay the same.</span></li>
+      <li><b>Saved groups</b><span>Reuse your regular crew instead of retyping the roster every time.</span></li>
+      <li><b>Decision history</b><span>A record of what the group picked, and when.</span></li>
+      <li><b>Scheduled close</b><span>Close at a set time, not just a live countdown.</span></li>
+      <li><b>Make it yours</b><span>Themes, and remove Quorum branding from shared ballots.</span></li>
+    </ul>
+    <div class="row">
+      <button class="btn ghost small" id="proLater">Maybe later</button>
+      <button class="btn small" id="proGet">Get Pro · $24/yr</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  "use strict";
+  const $ = s => document.querySelector(s);
+  const show = id => { ["create","share","intake","combine","vote","results"].forEach(s=>$("#"+s).classList.add("hidden")); $("#"+id).classList.remove("hidden"); G.stage=id; const bb=$("#backBtn"); if(bb) bb.classList.toggle("hidden", id==="create"); window.scrollTo(0,0); };
+  const esc = s => String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+
+  // ---- embedded venue data (mirrors mcp/quorum_venues/venues_mock.json, with est minutes) ----
+  const VENUES = [
+    {id:"d1",name:"Nonna Rosa",cat:"dinner",price:2,est:14,tags:["italian","vegan-friendly","quiet"]},
+    {id:"d2",name:"Shellback Oyster",cat:"dinner",price:4,est:18,tags:["seafood","shellfish","loud"]},
+    {id:"d3",name:"Green Bowl",cat:"dinner",price:1,est:15,tags:["vegan","vegetarian","quiet","cheap"]},
+    {id:"d4",name:"Taqueria Sol",cat:"dinner",price:1,est:22,tags:["mexican","vegan-friendly","cheap","loud"]},
+    {id:"d5",name:"Lentil & Co",cat:"dinner",price:1,est:12,tags:["vegan","vegetarian","quiet","cheap"]},
+    {id:"d6",name:"Noodle Bar",cat:"dinner",price:1,est:9,tags:["vegan-friendly","quiet"]},
+    {id:"d7",name:"Corner Diner",cat:"dinner",price:2,est:7,tags:["american","quiet","cheap"]},
+    {id:"k1",name:"The Quiet Car",cat:"drinks",price:2,est:11,tags:["cocktails","quiet","seated"]},
+    {id:"k2",name:"Barrel & Bass",cat:"drinks",price:3,est:16,tags:["beer","loud","standing"]},
+    {id:"c1",name:"Slow Pour",cat:"coffee",price:1,est:8,tags:["quiet","wifi","vegan-friendly"]},
+    {id:"c2",name:"Grand Central Roast",cat:"coffee",price:2,est:5,tags:["loud","grab-and-go"]},
+    {id:"m1",name:"Angelika Film Center",cat:"movie",price:2,est:12,tags:["indie","seated","accessible"]},
+    {id:"m2",name:"Nitehawk Cinema",cat:"movie",price:3,est:16,tags:["dine-in","seated","loud"]},
+    {id:"o1",name:"East River Loop",cat:"outdoors",price:1,est:10,tags:["walk","free","accessible","quiet"]},
+    {id:"o2",name:"Prospect Trailhead",cat:"outdoors",price:1,est:20,tags:["hike","free","steep"]},
+    {id:"a1",name:"Pin & Pocket Bowling",cat:"activity",price:2,est:13,tags:["bowling","loud","group-friendly"]},
+    {id:"a2",name:"Clay Studio",cat:"activity",price:3,est:17,tags:["pottery","quiet","seated","accessible"]}
+  ];
+
+  // ---- state ----
+  const G = {
+    mode:"list", question:"", type:"private", duration:3600, category:"dinner",
+    options:[], _short:[],
+    members:["You","Priya","Sam","Alex","Jake"],   // Jake is the deliberate no-show
+    votes:{}, sealed:{}, startedAt:0, closed:false, timer:null,
+  };
+  const QUORUM = 3;
+  const SIMLINES = {Priya:"vegan, not too expensive, close by", Sam:"anywhere cheap, prefer quiet", Alex:"no loud places, walkable"};
+
+  // ================= keyword parser (local fallback) =================
+  function parseLine(line){
+    const s = " " + (line||"").toLowerCase() + " ";
+    const musts=[], prefers=[], f={maxPrice:null,exclude:[],require:[],maxMin:null,openNow:false}, w={};
+    // budget — hard
+    if(/\b(broke|can'?t afford|cheap this week|\$ ?only)\b/.test(s)){ f.maxPrice=1; musts.push("budget: $ only"); }
+    else if(/\bunder \$+\b|\bnothing pricey\b/.test(s)){ f.maxPrice=2; musts.push("budget: ≤ $$"); }
+    // budget — soft
+    if(f.maxPrice==null && /\b(cheap(ish)?|affordable|not too expensive|not expensive|reasonable|prefer cheap)\b/.test(s)){ prefers.push("cheaper"); w.cheap=(w.cheap||0)+1; }
+    // exclusions "no X"
+    let m; const re=/\bno ([a-z][a-z-]{2,})/g;
+    while((m=re.exec(s))){ const t=m[1]; if(t!=="too"){ f.exclude.push(t.replace(/s$/,"")); musts.push("no "+t); } }
+    // diet / access — hard require
+    if(/\bvegan\b/.test(s)){ f.require.push(["vegan","vegan-friendly","vegetarian"]); musts.push("vegan"); }
+    else if(/\bvegetarian\b/.test(s)){ f.require.push(["vegetarian","vegan","vegan-friendly"]); musts.push("vegetarian"); }
+    if(/\baccessible|wheelchair\b/.test(s)){ f.require.push(["accessible"]); musts.push("accessible"); }
+    // time cap — hard
+    const tm = s.match(/(\d{1,3})\s*(min|minute|minutes)\b/);
+    if(tm){ f.maxMin=+tm[1]; musts.push("≤ "+tm[1]+" min"); }
+    // vibe / distance — soft prefers
+    if(/\b(quiet|chill|calm|mellow)\b/.test(s)){ prefers.push("quiet"); w.quiet=(w.quiet||0)+1; }
+    if(/\b(lively|fun|loud|buzzy)\b/.test(s) && !/\bno loud|not loud\b/.test(s)){ prefers.push("lively"); w.loud=(w.loud||0)+1; }
+    if(/\b(close|closeby|close by|nearby|walkable|walking distance)\b/.test(s)){ prefers.push("close"); w.__close=(w.__close||0)+1; }
+    if(/\b(seated|sit down|sitdown)\b/.test(s)){ prefers.push("seated"); w.seated=(w.seated||0)+1; }
+    return {line, musts, prefers, f, w};
+  }
+  function combine(list){
+    const C={maxPrice:null,exclude:new Set(),require:[],maxMin:null,openNow:false,w:{},cm:{},cp:{}};
+    list.forEach(p=>{
+      if(p.f.maxPrice!=null) C.maxPrice = C.maxPrice==null? p.f.maxPrice : Math.min(C.maxPrice,p.f.maxPrice);
+      p.f.exclude.forEach(t=>C.exclude.add(t));
+      p.f.require.forEach(g=>C.require.push(g));
+      if(p.f.maxMin!=null) C.maxMin = C.maxMin==null? p.f.maxMin : Math.min(C.maxMin,p.f.maxMin);
+      if(p.f.openNow) C.openNow=true;
+      for(const k in p.w) C.w[k]=(C.w[k]||0)+p.w[k];
+      p.musts.forEach(x=>C.cm[x]=(C.cm[x]||0)+1);
+      p.prefers.forEach(x=>C.cp[x]=(C.cp[x]||0)+1);
+    });
+    return C;
+  }
+  function suggest(cat,C){
+    let vs = VENUES.filter(v=>v.cat===cat).filter(v=>{
+      if(C.maxPrice!=null && v.price>C.maxPrice) return false;
+      for(const t of C.exclude){ if(v.tags.some(tag=>tag.includes(t)||t.includes(tag))) return false; }
+      for(const g of C.require){ if(!g.some(req=>v.tags.includes(req))) return false; }
+      if(C.maxMin!=null && v.est>C.maxMin) return false;
+      return true;
+    });
+    vs.forEach(v=>{
+      let sc=0; const reasons=[];
+      for(const tag in C.w){
+        if(tag==="__close") continue;
+        if(tag==="cheap"){ if(v.tags.includes("cheap")||v.price<=1){ sc+=C.w[tag]; reasons.push("cheap"); } continue; }
+        if(v.tags.includes(tag)){ sc+=C.w[tag]; reasons.push(tag); }
+      }
+      if(C.w.__close){ const b=Math.max(0,(25-v.est)/10)*C.w.__close; if(b>0){ sc+=b; reasons.push("close"); } }
+      v._score=sc; v._reasons=reasons;
+    });
+    vs.sort((a,b)=> b._score-a._score || a.est-b.est);
+    return vs.slice(0,4);
+  }
+
+  // ================= create screen =================
+  let seed = ["Nonna Rosa","Green Bowl","Taqueria Sol"];
+  const optsEl = $("#opts");
+  function renderOpts(){
+    optsEl.innerHTML="";
+    seed.forEach((val,i)=>{
+      const li=document.createElement("li"); li.className="opt-edit";
+      const inp=document.createElement("input"); inp.type="text"; inp.value=val; inp.placeholder="Restaurant name";
+      inp.oninput=()=>{ seed[i]=inp.value; };
+      const x=document.createElement("button"); x.className="x"; x.textContent="×";
+      x.onclick=()=>{ seed.splice(i,1); renderOpts(); };
+      li.appendChild(inp); li.appendChild(x); optsEl.appendChild(li);
+    });
+  }
+  renderOpts();
+  $("#addOpt").onclick=()=>{ seed.push(""); renderOpts(); optsEl.lastChild.querySelector("input").focus(); };
+
+  document.querySelectorAll("#modeChoice .c").forEach(b=>{
+    b.onclick=()=>{
+      document.querySelectorAll("#modeChoice .c").forEach(c=>c.classList.remove("active"));
+      b.classList.add("active"); G.mode=b.dataset.mode;
+      $("#listBlock").classList.toggle("hidden", G.mode!=="list");
+      $("#recBlock").classList.toggle("hidden", G.mode!=="recommend");
+    };
+  });
+  document.querySelectorAll("#typeChoice .c").forEach(b=>{
+    b.onclick=()=>{
+      document.querySelectorAll("#typeChoice .c").forEach(c=>c.classList.remove("active"));
+      b.classList.add("active"); G.type=b.dataset.type;
+      $("#sizeWarn").style.display = (G.type==="private" && G.members.length<5) ? "block" : "none";
+    };
+  });
+  $("#dur").querySelectorAll("button").forEach(b=>{
+    b.onclick=()=>{ if(b.dataset.pro){ openPro(); return; } $("#dur").querySelectorAll("button").forEach(x=>x.classList.remove("active")); b.classList.add("active"); G.duration=+b.dataset.s; };
+  });
+
+  // ================= pro (concept only) =================
+  const proModal=$("#proModal");
+  function openPro(){ proModal.classList.remove("hidden"); }
+  function closePro(){ proModal.classList.add("hidden"); }
+  $("#proOpen").onclick=openPro;
+  $("#proClose").onclick=closePro;
+  $("#proLater").onclick=closePro;
+  $("#proGet").onclick=()=>{ alert("Pro is a concept in this prototype — no checkout is wired up."); };
+  $("#saveGroup").onclick=openPro;
+  $("#histNudge").onclick=openPro;
+  proModal.addEventListener("click",e=>{ if(e.target===proModal) closePro(); });
+
+  // ================= back / cancel =================
+  // Once the ballot is open (link is out), the owner going back cancels the whole poll.
+  const LIVE = new Set(["share","intake","combine","vote"]);
+  function resetAll(){
+    if(G.timer){ clearInterval(G.timer); G.timer=null; }
+    G.closed=true; G.votes={}; G.sealed={};
+    seed=["Nonna Rosa","Green Bowl","Taqueria Sol"]; renderOpts();
+  }
+  $("#backBtn").onclick=()=>{
+    if(LIVE.has(G.stage) && !confirm("Cancel this poll? The link stops working and the ballot is discarded.")) return;
+    resetAll(); show("create");
+  };
+
+  $("#openBallot").onclick=()=>{
+    G.question = $("#q").value.trim() || "Where to?";
+    if(G.mode==="list"){
+      const labels = seed.map(s=>s.trim()).filter(Boolean);
+      if(!labels.length){ alert("Add at least one option."); return; }
+      G.options = labels.map((l,i)=>({id:"o"+i, label:l}));
+    } else {
+      G.category = $("#cat").value; G.options=[];
+    }
+    $("#shareType").textContent =
+      (G.mode==="recommend" ? "Recommend mode · " : "List mode · ") +
+      (G.type==="private" ? "Private vote · no one sees who wanted what." : "Open vote · everyone sees who voted.");
+    $("#goVote").textContent = G.mode==="recommend" ? "Add your keywords →" : "Open as first voter →";
+    show("share");
+  };
+
+  // ================= share =================
+  $("#copy").onclick=()=>{ const t=$("#url").textContent; if(navigator.clipboard) navigator.clipboard.writeText(t); $("#copy").textContent="Copied"; setTimeout(()=>$("#copy").textContent="Copy",1200); };
+  $("#goVote").onclick=()=>{ if(G.mode==="recommend") startIntake(); else buildVote(); };
+
+  // ================= intake (recommend) =================
+  function chipsHTML(p){
+    const h = p.musts.map(m=>'<span class="chip-c must">'+esc(m)+'</span>').join("")
+            + p.prefers.map(x=>'<span class="chip-c pref">'+esc(x)+'</span>').join("");
+    return h || '<span class="privline">nothing yet — tap what matters above.</span>';
+  }
+
+  // ---- structured intake config ----
+  const DIET = [
+    {label:"Vegan",       req:["vegan","vegan-friendly","vegetarian"]},
+    {label:"Vegetarian",  req:["vegetarian","vegan","vegan-friendly"]},
+    {label:"Pescatarian", req:null},
+    {label:"Halal",       req:null},
+    {label:"Kosher",      req:null},
+  ];
+  const ALLERGENS = ["Milk","Egg","Fish","Shellfish","Tree nuts","Peanuts","Wheat","Gluten","Soy","Sesame"];
+  // Menus can't be read from venue APIs, so allergens are handled by likelihood, not certainty:
+  //   conflict = allergen is central to the venue  -> hard-drop (options unlikely)
+  //   safeIf   = venue tags implying it's absent    -> rank higher (likely to have safe options)
+  // Neither known -> keep the venue but don't vouch for it; the caveat tells people to confirm.
+  const ALLERGEN_MODEL = {
+    Shellfish:   {conflict:["shellfish","seafood"], safeIf:["vegan","vegetarian","vegan-friendly"]},
+    Fish:        {conflict:["seafood","fish"],       safeIf:["vegan","vegetarian","vegan-friendly"]},
+    Milk:        {conflict:[],                        safeIf:["vegan"]},
+    Egg:         {conflict:[],                        safeIf:["vegan"]},
+    "Tree nuts": {conflict:[],                        safeIf:[]},
+    Peanuts:     {conflict:[],                        safeIf:[]},
+    Wheat:       {conflict:[],                        safeIf:[]},
+    Gluten:      {conflict:[],                        safeIf:[]},
+    Soy:         {conflict:[],                        safeIf:[]},
+    Sesame:      {conflict:[],                        safeIf:[]},
+  };
+  const AMBIENCE = [
+    {label:"Quiet", w:"quiet"}, {label:"Chill", w:"quiet"}, {label:"Lively", w:"loud"},
+    {label:"Party", w:"loud"},  {label:"Cozy",  w:"quiet"}, {label:"Seated", w:"seated"},
+    {label:"Upscale", w:null},  {label:"Outdoor", w:null},
+  ];
+  const CUISINES = ["Italian","Mexican","Chinese","Japanese","Thai","Indian","Mediterranean","Korean","Vietnamese","American","French","Greek","Middle Eastern","Caribbean"];
+  const sel = { budget:null, distance:null, diet:new Set(), allergen:new Set(), custom:new Set(), ambience:new Set(), cuisine:new Set(), cuisineCustom:new Set() };
+  const toggle = (set,v)=>{ set.has(v)? set.delete(v) : set.add(v); };
+
+  // structured fields -> the same {musts,prefers,f,w} shape the parser produced
+  function buildYou(){
+    const musts=[], prefers=[], f={maxPrice:null,exclude:[],require:[],maxMin:null,openNow:false}, w={};
+    if(sel.budget){ f.maxPrice=sel.budget; musts.push("budget: ≤ "+"$".repeat(sel.budget)); }
+    if(sel.distance){ f.maxMin=sel.distance; musts.push("≤ "+sel.distance+" min away"); }
+    sel.diet.forEach(label=>{ const d=DIET.find(x=>x.label===label); if(d&&d.req) f.require.push(d.req); musts.push(label.toLowerCase()); });
+    sel.allergen.forEach(label=>{
+      const md = ALLERGEN_MODEL[label] || {conflict:[],safeIf:[]};
+      md.conflict.forEach(t=>f.exclude.push(t));       // drop only where the allergen is the venue's whole concept
+      md.safeIf.forEach(t=>{ w[t]=(w[t]||0)+1; });      // favor venues likely to have safe options
+      musts.push("no "+label.toLowerCase());
+    });
+    sel.custom.forEach(t=>{ f.exclude.push(t.toLowerCase().replace(/s$/,"")); musts.push("no "+t.toLowerCase()); });
+    sel.ambience.forEach(label=>{ const a=AMBIENCE.find(x=>x.label===label); prefers.push(label.toLowerCase()); if(a&&a.w) w[a.w]=(w[a.w]||0)+1; });
+    const cz=new Set([...sel.cuisine, ...sel.cuisineCustom].map(c=>c.toLowerCase()));
+    cz.forEach(c=>{ prefers.push(c); w[c]=(w[c]||0)+1; });
+    return {line:"", musts, prefers, f, w};
+  }
+  function renderYou(){ $("#youChips").innerHTML = chipsHTML(buildYou()); }
+
+  function renderPickers(){
+    $("#budget").querySelectorAll("button").forEach(b=>{
+      b.classList.toggle("active", sel.budget===+b.dataset.tier);
+      b.onclick=()=>{ sel.budget = (sel.budget===+b.dataset.tier ? null : +b.dataset.tier); renderPickers(); renderYou(); };
+    });
+    $("#distance").querySelectorAll("button").forEach(b=>{
+      const mn=+b.dataset.min;   // 0 == "Any" (no cap)
+      b.classList.toggle("active", mn===0 ? sel.distance==null : sel.distance===mn);
+      b.onclick=()=>{ sel.distance = (mn===0 ? null : mn); renderPickers(); renderYou(); };
+    });
+    const group=(host,items,set,cls,valOf,labOf)=>{
+      $(host).innerHTML = items.map(it=>'<button class="chip-c pick '+cls+(set.has(valOf(it))?" sel":"")+'" data-v="'+esc(valOf(it))+'">'+esc(labOf(it))+'</button>').join("");
+      $(host).querySelectorAll("button").forEach(b=>b.onclick=()=>{ toggle(set,b.dataset.v); renderPickers(); renderYou(); });
+    };
+    group("#dietPick",     DIET,      sel.diet,     "mustc", d=>d.label, d=>d.label);
+    group("#allergenPick", ALLERGENS, sel.allergen, "mustc", a=>a,       a=>a);
+    group("#ambiencePick", AMBIENCE,  sel.ambience, "prefc", a=>a.label, a=>a.label);
+    group("#cuisinePick",  CUISINES,  sel.cuisine,  "prefc", c=>c,       c=>c);
+    // custom allergens: colored + removable
+    $("#customPick").innerHTML = [...sel.custom].map(t=>'<button class="chip-c pick mustc sel" data-v="'+esc(t)+'">'+esc(t)+' ×</button>').join("");
+    $("#customPick").querySelectorAll("button").forEach(b=>b.onclick=()=>{ sel.custom.delete(b.dataset.v); renderPickers(); renderYou(); });
+    // custom cuisines: colored + removable
+    $("#cuisineCustomPick").innerHTML = [...sel.cuisineCustom].map(t=>'<button class="chip-c pick prefc sel" data-v="'+esc(t)+'">'+esc(t)+' ×</button>').join("");
+    $("#cuisineCustomPick").querySelectorAll("button").forEach(b=>b.onclick=()=>{ sel.cuisineCustom.delete(b.dataset.v); renderPickers(); renderYou(); });
+  }
+
+  function startIntake(){
+    $("#iq").textContent = G.question;
+    // sensible defaults so the demo lands populated
+    sel.budget=1; sel.distance=null; sel.diet=new Set(); sel.allergen=new Set(["Shellfish"]); sel.custom=new Set(); sel.ambience=new Set(["Quiet"]); sel.cuisine=new Set(); sel.cuisineCustom=new Set();
+    const wireAdd=(inputId,btnId,set)=>{
+      $(btnId).onclick=()=>{ const v=$(inputId).value.trim(); if(v){ set.add(v); $(inputId).value=""; renderPickers(); renderYou(); } };
+      $(inputId).onkeydown=e=>{ if(e.key==="Enter"){ e.preventDefault(); $(btnId).click(); } };
+    };
+    wireAdd("#allergenAdd","#allergenAddBtn",sel.custom);
+    wireAdd("#cuisineAdd","#cuisineAddBtn",sel.cuisineCustom);
+    renderPickers(); renderYou();
+    // attendance only — never the other members' actual constraints (no anchoring, no leak)
+    const seal=$("#simSealed"); seal.innerHTML="";
+    G.members.filter(m=>m!=="You").forEach(m=>{
+      const done = m!=="Jake";   // Jake is the deliberate no-show
+      const c=document.createElement("span"); c.className="chip"+(done?" in":""); c.textContent=done?m+" ✓":m+" …"; seal.appendChild(c);
+    });
+    show("intake");
+  }
+  $("#combineBtn").onclick=()=>{
+    const parsed=[buildYou()];
+    Object.values(SIMLINES).forEach(l=>parsed.push(parseLine(l)));
+    const C=combine(parsed);
+    renderCombine(C, suggest(G.category,C));
+    show("combine");
+  };
+  function renderCombine(C,short){
+    const priv = (G.type==="private");
+    const chip=(k,n,cls)=>'<span class="chip-c '+cls+'">'+esc(k)+((!priv&&n>1)?" ×"+n:"")+'</span>';
+    // In a private ballot, only surface a constraint if 2+ members share it — a lone constraint
+    // can't be shown without fingering the one person who set it. Singletons are still applied,
+    // just not displayed. Open ballots show everything, since the group chose transparency.
+    const fill=(host,obj,cls)=>{
+      const entries=Object.entries(obj);
+      if(!entries.length){ $(host).innerHTML='<span class="privline">none</span>'; return; }
+      if(!priv){ $(host).innerHTML=entries.map(([k,n])=>chip(k,n,cls)).join(""); return; }
+      const shared=entries.filter(([,n])=>n>=2), lone=entries.length-shared.length;
+      let h=shared.map(([k,n])=>chip(k,n,cls)).join("");
+      if(lone>0) h+='<span class="chip-c '+cls+'" style="opacity:.55">+'+lone+' kept private</span>';
+      $(host).innerHTML = h || '<span class="privline">all kept private</span>';
+    };
+    fill("#cMusts", C.cm, "must");
+    fill("#cPrefers", C.cp, "pref");
+    $("#combineNote").textContent = priv
+      ? "Private ballot: a constraint only shows if two or more share it. Anything one person set is applied but never displayed, so no one can be singled out."
+      : "Open ballot: every constraint and reason is shown, because the group chose an open vote.";
+    $("#allergenNote").style.display = (sel.allergen.size||sel.custom.size) ? "block" : "none";
+    const sl=$("#shortlist"); sl.innerHTML="";
+    if(!short.length){
+      sl.innerHTML='<li>No '+esc(G.category)+' spot satisfies every must. Someone’s hard constraint is ruling everything out — loosen one and re-run.</li>';
+      $("#toVote").disabled=true; return;
+    }
+    $("#toVote").disabled=false; G._short=short;
+    short.forEach((v,i)=>{
+      const li=document.createElement("li");
+      const price="$".repeat(v.price);
+      // private: generalize the reason so the specific tags don't reverse-engineer hidden constraints
+      const reasons = priv ? "meets the group’s musts" : (v._reasons.length ? v._reasons.join(" · ") : "meets all musts");
+      li.innerHTML='<div class="nm">'+(i+1)+". "+esc(v.name)+'</div><div class="meta">'+price+" · ~"+v.est+" min · "+esc(reasons)+'</div>';
+      sl.appendChild(li);
+    });
+  }
+  $("#toVote").onclick=()=>{ G.options=G._short.map(v=>({id:v.id,label:v.name})); buildVote(); };
+
+  // ================= vote =================
+  function buildVote(){
+    G.votes={}; G.sealed={}; G.closed=false; G.startedAt=Date.now();
+    $("#vq").textContent = G.question;
+    $("#voteHint").textContent = G.type==="private"
+      ? "Tap every option you'd be happy with, then seal. Your picks stay sealed."
+      : "Tap every option you'd be happy with, then seal. The group will see your picks.";
+    const b=$("#ballot"); b.innerHTML="";
+    G.options.forEach(o=>{
+      const li=document.createElement("li"); li.dataset.id=o.id;
+      li.innerHTML='<span class="mark"><svg viewBox="0 0 16 16"><path d="M2 9 L6 13 L14 3" fill="none" stroke="#1a120c" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span class="oname"></span>';
+      li.querySelector(".oname").textContent=o.label;
+      li.onclick=()=>{ if(G.sealed["You"])return; li.classList.toggle("pick"); };
+      b.appendChild(li);
+    });
+    $("#seal").disabled=false; $("#seal").textContent="Seal my ballot";
+    renderVoters(); updateGate();
+    show("vote"); scheduleSims(); tick(); G.timer=setInterval(tick,1000);
+  }
+  $("#seal").onclick=()=>{
+    if(G.sealed["You"])return;
+    const picks=new Set(); document.querySelectorAll("#ballot li.pick").forEach(li=>picks.add(li.dataset.id));
+    if(!picks.size && !confirm("Seal with no options picked? You'll count as present but approve nothing.")) return;
+    G.votes["You"]=picks; G.sealed["You"]=true;
+    $("#seal").disabled=true; $("#seal").textContent="Ballot sealed ✓";
+    document.querySelectorAll("#ballot li").forEach(li=>li.style.cursor="default");
+    renderVoters(); updateGate();
+  };
+  $("#closeNow").onclick=closeBallot;
+
+  function scheduleSims(){
+    const prefs=simPrefs();
+    const plan=[["Priya",2600],["Sam",6200],["Alex",10200]];
+    plan.forEach(([name,delay])=>{
+      setTimeout(()=>{
+        if(G.closed)return;
+        G.votes[name]=prefs[name]; G.sealed[name]=true; renderVoters(); updateGate();
+        if(Object.keys(G.sealed).length>=G.members.length-1 && G.sealed["You"]) setTimeout(closeBallot,800);
+      },delay);
+    });
+  }
+  function simPrefs(){
+    const ids=G.options.map(o=>o.id), pick=a=>new Set(a.filter(x=>ids.includes(x)));
+    return {
+      Priya: pick([ids[0], ids[2]].filter(Boolean)),
+      Sam:   pick([ids[0], ids[1]].filter(Boolean)),
+      Alex:  pick([ids[1], ids[0]].filter(Boolean)),
+    };
+  }
+  function renderVoters(){
+    const v=$("#voters"); v.innerHTML="";
+    G.members.forEach(m=>{ const c=document.createElement("span"); const inn=G.sealed[m]; c.className="chip"+(inn?" in":""); c.textContent=inn?m+" ✓":m+" …"; v.appendChild(c); });
+  }
+  function updateGate(){
+    const n=Object.keys(G.sealed).length;
+    $("#gate").textContent = n>=QUORUM ? n+" sealed. Quorum met." : "Sealed ballots hidden until "+QUORUM+" are in. ("+n+"/"+QUORUM+")";
+  }
+  function fmt(sec){
+    const h=Math.floor(sec/3600), m=Math.floor((sec%3600)/60), s=sec%60;
+    return (h>0 ? h+":"+String(m).padStart(2,"0") : m)+":"+String(s).padStart(2,"0");
+  }
+  function tick(){
+    if(G.closed)return;
+    const left=Math.max(0, G.duration-Math.round((Date.now()-G.startedAt)/1000));
+    $("#cd").innerHTML="closes in <b"+(left<=10?' class="urgent"':"")+">"+fmt(left)+"</b>";
+    if(left<=0) closeBallot();
+  }
+
+  // ================= results =================
+  function closeBallot(){
+    if(G.closed)return; G.closed=true; clearInterval(G.timer);
+    const present=G.members.filter(m=>G.sealed[m]);
+    const gaps=G.members.filter(m=>!G.sealed[m]);
+    const counts=G.options.map(o=>{ const who=present.filter(m=>G.votes[m]&&G.votes[m].has(o.id)); return {o,n:who.length,who}; });
+    counts.sort((a,b)=>b.n-a.n);
+    const top=counts[0]?counts[0].n:0;
+
+    if(present.length<QUORUM){
+      $("#rq").textContent="Closed";
+      $("#rsub").textContent="Only "+present.length+" sealed. Quorum ("+QUORUM+") not met, so nothing is revealed.";
+      $("#res").innerHTML=""; $("#gapline").classList.add("hidden");
+      $("#privline").textContent="A count this small would identify people. That is the point of the gate.";
+      show("results"); return;
+    }
+    $("#rq").textContent = top>0 ? "Decided: "+counts[0].o.label : "Closed — no approvals";
+    $("#rsub").textContent = "Sealed with "+present.length+" of "+G.members.length+" votes.";
+    const res=$("#res"); res.innerHTML="";
+    counts.forEach((c,i)=>{
+      const li=document.createElement("li");
+      if(i===0 && c.n>0) li.className="winner"; if(c.n===0) li.className="struck";
+      const seal=(i===0 && c.n>0)?waxSeal():"";
+      const who=(G.type==="open" && c.n>0)?'<div class="who">'+esc(c.who.join(", "))+'</div>':"";
+      const stamp=(c.n===0)?'<span class="stamp">STRUCK</span>':"";
+      li.innerHTML = seal + '<div><div class="oname">'+esc(c.o.label)+'</div>'+who+'</div><div class="count">'+tally(c.n)+'</div>'+stamp;
+      res.appendChild(li);
+    });
+    if(gaps.length){ $("#gapline").classList.remove("hidden"); $("#gapline").textContent="Gap: "+gaps.join(", ")+" never answered. Decided with "+present.length+" of "+G.members.length+"."; }
+    else $("#gapline").classList.add("hidden");
+    $("#privline").textContent = G.type==="private" ? "Private ballot: the tallies show what won, never who wanted it." : "Open ballot: names shown because the group chose an open vote.";
+    show("results");
+  }
+  $("#again").onclick=()=>{ seed=["Nonna Rosa","Green Bowl","Taqueria Sol"]; renderOpts(); show("create"); };
+
+  // ---- drawing helpers ----
+  function waxSeal(){
+    return '<svg width="40" height="40" viewBox="0 0 40 40" style="flex:none">'+
+      '<circle cx="20" cy="20" r="16" fill="#c8372a"/>'+
+      '<circle cx="20" cy="20" r="16" fill="none" stroke="#8f2418" stroke-width="1.5"/>'+
+      '<circle cx="20" cy="20" r="12" fill="none" stroke="#e57a6e" stroke-width="1" stroke-dasharray="2 2"/>'+
+      '<text x="20" y="25" text-anchor="middle" font-family="serif" font-size="15" fill="#f7f1e6" font-weight="700">Q</text></svg>';
+  }
+  function tally(n){
+    if(n===0) return "0";
+    const gw=30,h=30,groups=Math.floor(n/5),rem=n%5,total=groups+(rem>0?1:0),width=total*gw+4;
+    let inner="",ox=3;
+    const grp=(count,ox)=>{ let s="";const v=Math.min(count,4);
+      for(let i=0;i<v;i++) s+='<line x1="'+(ox+i*6)+'" y1="4" x2="'+(ox+i*6)+'" y2="26"/>';
+      if(count===5) s+='<line x1="'+(ox-3)+'" y1="25" x2="'+(ox+21)+'" y2="5"/>'; return s; };
+    for(let g=0;g<groups;g++){ inner+=grp(5,ox); ox+=gw; }
+    if(rem>0) inner+=grp(rem,ox);
+    return '<svg class="tally" width="'+width+'" height="'+h+'" viewBox="0 0 '+width+' '+h+'">'+inner+'</svg>';
+  }
+})();
+</script>
+</body>
+</html>
