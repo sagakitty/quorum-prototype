@@ -780,6 +780,7 @@
   }
   function updateGate(){
     const n=Object.keys(G.sealed).length;
+    if(G.type!=="private"){ $("#gate").textContent = n+" sealed. Open vote — no anonymity gate; the result shows who chose what."; return; }
     $("#gate").textContent = n>=QUORUM ? n+" sealed. Quorum met." : "Sealed ballots hidden until "+QUORUM+" are in. ("+n+"/"+QUORUM+")";
   }
   function fmt(sec){
@@ -802,7 +803,9 @@
     counts.sort((a,b)=>b.n-a.n);
     const top=counts[0]?counts[0].n:0;
 
-    if(present.length<QUORUM){
+    // The quorum gate only protects anonymity, so it applies to private ballots only.
+    // An open ballot has nothing to hide (everyone sees who voted), so it just shows the result.
+    if(G.type==="private" && present.length<QUORUM){
       $("#rq").textContent="Closed";
       $("#rsub").textContent="Only "+present.length+" sealed. Quorum ("+QUORUM+") not met, so nothing is revealed.";
       $("#res").innerHTML=""; $("#gapline").classList.add("hidden");
